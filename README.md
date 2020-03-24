@@ -15,7 +15,7 @@ which is running on the same linux machine as the cdp-forensic-webserver.
 
 ## Installation
 
-Install the [forked version of cdpfgl](https://github.com/meinlschmidt/cdp-sauvegarde) by following the readme on every client and the server machine, which will be the cdp-forensic-webserver.
+Install the [forked version of cdpfgl](https://github.com/meinlschmidt/sauvegarde) by following the readme on every client and the server machine, which will be the cdp-forensic-webserver.
 Gnu/linux operating systems that can run cdpfgl can be found in the readme, we used Ubuntu 18.04 LTS for clients and server.
 
 Start the cdp server on the server machine using the default config with
