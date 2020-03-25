@@ -27,8 +27,8 @@ public class WebserverApplication {
         //delete tmpDataDirectory at Application-Start
         FileSystemUtils.deleteRecursively(new File(tmpDataDirectory));
         //create DataDirectories
-        new File(tmpDataDirectory).mkdir();
-        new File(restoreDataDirectory).mkdir();
-        new File(entropyDataDirectory).mkdir();
+        new File(tmpDataDirectory).mkdirs();
+        new File(restoreDataDirectory).mkdirs();
+        new File(entropyDataDirectory).mkdirs();
     }
 }
