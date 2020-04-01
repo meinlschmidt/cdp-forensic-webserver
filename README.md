@@ -12,6 +12,6 @@ Install Java JDK 8 or higher.
 
 Check out this repository, e.g. with IntelliJ, and run the cdp-forensic-webserver.
 
-Update the variable "commandexternalcall" in /src/main/java/pseminar/cdp/webserver/Entropies.java to the external python script: [entropie](https://github.com/LudwigEnglbrecht/entropie).
+Update the variable "commandexternalcall" in /src/main/java/pseminar/cdp/webserver/Entropies.java to the external python script from [https://github.com/LudwigEnglbrecht/entropie](https://github.com/LudwigEnglbrecht/entropie).
 
 Use the [cdp-forensic-frontend](https://github.com/danieltrtwn/cdp-forensic-frontend-private) as GUI to use the services provided by the cdp-forensic-webserver.
