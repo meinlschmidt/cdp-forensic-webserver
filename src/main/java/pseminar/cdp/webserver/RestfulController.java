@@ -195,6 +195,76 @@ public class RestfulController {
         return answer;
     }
 
+    @GetMapping("/restoreFolder2/{hostname}")
+    public JSONObject restoreAndSaveFile2(@PathVariable String hostname, @RequestParam String path, @RequestParam String name, @RequestParam Long mtimestart, @RequestParam Long mtimeend, @RequestParam(required = false, defaultValue = "/") String regex) throws IOException, InterruptedException, ParseException {
+
+        name = decodeUrl(name);
+        path = decodeUrl(path);
+        regex = decodeUrl(regex);
+
+        //default Filter is / and matches all Files
+        System.out.println("GET restoreFolder: Requested Restore of Folder " + name + " at " + path + " from User " + hostname + " from modifyTime " + mtimestart + " until " + mtimeend + " with Filter " + regex);
+
+        long currentUnixTime = Instant.now().getEpochSecond();
+        new File(restoreDataDirectory + currentUnixTime).mkdir();
+
+        UriGenerator uriGen = new UriGenerator();
+        String uri = uriGen.createCDPServerUri(hostname, path, mtimestart, mtimeend, "False", "True");
+
+        System.out.println("GET restoreFolder: Request Data for Host " + hostname + " from CDP-Server with generated URL: " + uri);
+
+        RestTemplate restTemplate = new RestTemplate();
+        JSONObject result = restTemplate.getForObject(uri, JSONObject.class);
+
+        JSONParser parser = new JSONParser();
+        JSONObject parsedJson = (JSONObject) parser.parse(result.toJSONString());
+        JSONArray fileList = (JSONArray) parsedJson.get("file_list");
+
+        long restoreCount = 0;
+
+        for (Object obj : fileList) {
+
+            JSONObject jObj = (JSONObject) obj;
+            String filePath = (String) jObj.get("name");
+            long fileType = (long) jObj.get("filetype");
+            long mtime = (long) jObj.get("mtime");
+
+            if (fileType != 2 && filePath.contains(regex)) {
+
+                LinkedList<String> pathList = new LinkedList<>(Arrays.asList(filePath.split("/")));
+                pathList.removeLast();
+                String tmpPath = "";
+                for (String s : pathList) {
+                    tmpPath += "/" + s;
+                }
+                tmpPath = tmpPath.replaceFirst("/", "");
+                //System.out.println(tmpPath);
+
+                new File(restoreDataDirectory + currentUnixTime + "/" + tmpPath).mkdirs();
+                String restorePath = restoreDataDirectory + currentUnixTime + "/" + tmpPath;
+
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.directory(new File(restorePath));
+                processBuilder.command("cdpfglrestore", "-r", "^\\Q" + filePath + "\\E$", "-n", hostname, "-t", unixTimeToDate(mtime, false));
+                Process process = processBuilder.start();
+                if (DEBUG_CDP_SERVER) {
+                    InputStream inputStream = process.getInputStream();
+                    Consumer<String> consumer = System.out::println;
+                    new BufferedReader(new InputStreamReader(inputStream)).lines().forEach(consumer);
+                }
+                process.waitFor();
+                restoreCount++;
+            }
+        }
+
+        JSONObject answer = new JSONObject();
+        answer.put("folderName", currentUnixTime);
+        answer.put("restoredFiles", fileList);
+
+        return answer;
+    }
+    
+
     @GetMapping("/folderList")
     public JSONArray getRestoredFolderList() throws IOException {
         JSONArray folderArray = new JSONArray();
@@ -323,6 +393,79 @@ public class RestfulController {
         System.out.println(answer);
 
         return answer;
+    }
+
+    @GetMapping("/calculateEntropy2/{hostname}")
+    public String calculateEntropy2(@PathVariable String hostname, @RequestParam String path, @RequestParam String name, @RequestParam Long mtimestart, @RequestParam Long mtimeend, @RequestParam(required = false, defaultValue = "/") String regex) throws IOException, InterruptedException, ParseException {
+
+        path = decodeUrl(path);
+        name = decodeUrl(name);
+        regex = decodeUrl(regex);
+
+        //default Filter is / and matches all Files
+        System.out.println("GET calculateEntropy: Requested Entropy of Folder " + name + " at " + path + " from User " + hostname + " from modifyTime " + mtimestart + " until " + mtimeend + " with Filter " + regex);
+
+        long currentUnixTime = Instant.now().getEpochSecond();
+
+        UriGenerator uriGen = new UriGenerator();
+        String uri = uriGen.createCDPServerUri(hostname, path, mtimestart, mtimeend, "False", "True");
+
+        System.out.println("GET calculateEntropy: Request Data for Host " + hostname + " from CDP-Server with generated URL: " + uri);
+
+        RestTemplate restTemplate = new RestTemplate();
+        JSONObject result = restTemplate.getForObject(uri, JSONObject.class);
+
+        JSONParser parser = new JSONParser();
+        JSONObject parsedJson = (JSONObject) parser.parse(result.toJSONString());
+        JSONArray fileList = (JSONArray) parsedJson.get("file_list");
+
+        File csvFile = new File(entropyDataDirectory + currentUnixTime + ".csv");
+
+        long count = 0;
+        long failed = 0;
+
+        for (Object obj : fileList) {
+
+            JSONObject jObj = (JSONObject) obj;
+            String filePath = (String) jObj.get("name");
+            long fileType = (long) jObj.get("filetype");
+            long mtime = (long) jObj.get("mtime");
+
+            if (fileType != 2 && filePath.contains(regex)) {
+
+                List<String> pathList = Arrays.asList(jObj.get("name").toString().split("/"));
+                String filename = pathList.get(pathList.size() - 1);
+
+                //restore every requested File in tmp-Directory
+                String tmpFileID = UUID.randomUUID().toString();
+                new File(tmpDataDirectory + tmpFileID).mkdir();
+                String restorePath = tmpDataDirectory + tmpFileID;
+
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.directory(new File(restorePath));
+                processBuilder.command("cdpfglrestore", "-r", "^\\Q" + filePath + "\\E$", "-n", hostname, "-t", unixTimeToDate(mtime, false));
+                Process process = processBuilder.start();
+                if (DEBUG_CDP_SERVER) {
+                    InputStream inputStream = process.getInputStream();
+                    Consumer<String> consumer = System.out::println;
+                    new BufferedReader(new InputStreamReader(inputStream)).lines().forEach(consumer);
+                }
+                process.waitFor();
+                count++;
+
+                //calculate Entropy for every restored File
+                File restoredFile = new File(restorePath + "/" + filename);
+                Entropies entropies = new Entropies();
+                try {
+                    entropies.calculateEntropyLudwig(csvFile, restoredFile, filePath, mtime);
+                } catch (NoSuchFileException e) {
+                    System.err.println("calculateEntropy failed for File " + restoredFile.getAbsolutePath() + " not found, " +
+                            "because File was not restored.\n Check the CDP-Server Logs for this File!");
+                    failed++;
+                }
+            }
+        }
+        return csvFile.getName();
     }
 
     @GetMapping("/entropyList")
